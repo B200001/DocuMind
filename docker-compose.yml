@@ -1,0 +1,167 @@
+version: "3.9"
+
+volumes:
+  qdrant_storage:
+  langfuse_db_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
+
+# Shared env for langfuse-web and langfuse-worker (v3 needs Postgres + ClickHouse + Redis + S3/MinIO)
+x-langfuse-env: &langfuse-env
+  DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+  SALT: change-me-in-production-salt
+  ENCRYPTION_KEY: 9a5b3b11ca1d9da7f8c8f85882ba86afcc49b07555c89b3655643326b2e32690
+  TELEMETRY_ENABLED: "true"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: clickhouse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: langfuse-redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: myredissecret
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+
+services:
+
+  # ─── Qdrant (Vector Store) ──────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: documind-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  # ─── Langfuse Postgres DB ───────────────────────────────
+  langfuse-db:
+    image: postgres:16
+    container_name: documind-langfuse-db
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─── Langfuse ClickHouse (Analytics DB, required by v3) ──
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: documind-langfuse-clickhouse
+    environment:
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ─── Langfuse Redis (Cache / Queue, required by v3) ──────
+  langfuse-redis:
+    image: redis:7
+    container_name: documind-langfuse-redis
+    command: --requirepass myredissecret
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "myredissecret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # ─── Langfuse MinIO (S3-compatible blob store, required by v3) ──
+  langfuse-minio:
+    image: minio/minio:latest
+    container_name: documind-langfuse-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    ports:
+      - "9090:9000"   # S3 API
+      - "9091:9001"   # MinIO console
+    volumes:
+      - langfuse_minio_data:/data
+    entrypoint: >
+      /bin/sh -c "
+      mkdir -p /data/langfuse &&
+      minio server /data --console-address ':9001'
+      "
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ─── Langfuse Worker (background processing, required by v3) ──
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: documind-langfuse-worker
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    environment:
+      <<: *langfuse-env
+    restart: unless-stopped
+
+  # ─── Langfuse Web (Observability UI) ────────────────────
+  langfuse:
+    image: langfuse/langfuse:3
+    container_name: documind-langfuse
+    ports:
+      - "3000:3000"
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: change-me-in-production-secret
+      NEXTAUTH_URL: http://localhost:3000
+    restart: unless-stopped
