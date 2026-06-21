@@ -23,7 +23,7 @@ dependencies = [
     "langchain>=1.0",
     "langgraph>=1.0",
     "langchain-community>=0.4",
-    "ollama>=0.2",
+    "ollama>=0.6",
 
     # ─── Embeddings & Reranking ───────────────────────────
     "sentence-transformers>=3.0",
