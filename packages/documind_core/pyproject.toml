@@ -38,6 +38,7 @@ dependencies = [
 
     # ─── Observability ────────────────────────────────────
     "langfuse>=3",
+    "tiktoken>=0.7"
 ]
 
 [project.optional-dependencies]
