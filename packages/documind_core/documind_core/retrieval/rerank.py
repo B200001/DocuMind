@@ -230,61 +230,22 @@ def rerank(
     ]
 
 
-def retrieve_and_rerank(
-    query: str,
-    top_n: Optional[int] = None,
-    filter=None,
-    doc_id: Optional[str] = None,
-    embedder: Optional[OllamaEmbedder] = None,
-    store: Optional[QdrantStore] = None,
-) -> list[RetrievedChunk]:
-    """
-    Convenience one-liner: hybrid_search → rerank.
+def retrieve_and_rerank(query: str, top_n: Optional[int] = None, filter=None,
+                         doc_id: Optional[str] = None, embedder=None, store=None) -> list[RetrievedChunk]:
+    from documind_core.observability.langfuse_client import observe_retrieval, update_span
+    from documind_core.config import get_settings
+    settings = get_settings()
+    effective_top_n = top_n if top_n is not None else settings.rerank_top_n
 
-    Runs a full hybrid retrieval pipeline and returns only the final
-    reranked top-N results. This is the function the agent and eval
-    harness should call in most cases.
-
-    Parameters
-    ----------
-    query:
-        Natural-language question or search string.
-    top_n:
-        Final number of chunks to return after reranking.
-        Defaults to settings.rerank_top_n (8).
-        The intermediate hybrid_search uses settings.retrieve_top_k (40)
-        as its candidate pool size automatically.
-    filter:
-        Optional Qdrant filter passed through to hybrid_search.
-    doc_id:
-        Optional single-document filter passed through to hybrid_search.
-    embedder:
-        Optional OllamaEmbedder for dependency injection (tests).
-    store:
-        Optional QdrantStore for dependency injection (tests).
-
-    Returns
-    -------
-    list[RetrievedChunk]
-        Reranked chunks, sorted by cross-encoder relevance score descending.
-        rrf_score on each chunk holds the cross-encoder score (not the
-        original RRF score — it is overwritten by rerank()).
-
-    Example
-    -------
-        results = retrieve_and_rerank("what is the warranty period?")
-        for r in results:
-            print(r.rrf_score, r.source_ref)
-            print(r.text[:200])
-    """
-    # Step 1: broad retrieval — uses retrieve_top_k candidates (default 40)
-    candidates = hybrid_search(
-        query=query,
-        filter=filter,
-        doc_id=doc_id,
-        embedder=embedder,
-        store=store,
-    )
+    with observe_retrieval(query, top_k=settings.retrieve_top_k):
+        candidates = hybrid_search(query=query, filter=filter, doc_id=doc_id, embedder=embedder, store=store)
+        results = rerank(query=query, chunks=candidates, top_n=effective_top_n)
+        update_span(output={
+            "candidates": len(candidates),
+            "returned": len(results),
+            "top_score": round(results[0].rrf_score, 4) if results else None,
+        })
+    return results
 
     # Step 2: precise reranking — narrows to rerank_top_n (default 8)
     return rerank(query=query, chunks=candidates, top_n=top_n)

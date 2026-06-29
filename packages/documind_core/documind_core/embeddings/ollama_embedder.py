@@ -268,7 +268,18 @@ class OllamaEmbedder:
         Only non-transient failures (model not found, wrong dimension)
         are converted to our specific exception types here.
         """
-        response = self._client.embed(model=self.model, input=batch)
+        from documind_core.observability.langfuse_client import (
+            observe_embedding, update_generation, estimate_tokens,
+        )
+        label = "embed:query" if len(batch) == 1 else f"embed:documents({len(batch)})"
+        total_input_tokens = sum(estimate_tokens(t) for t in batch)
+
+        with observe_embedding(label, model=self.model, input_texts=batch):
+            response = self._client.embed(model=self.model, input=batch)
+            update_generation(
+                output=f"<{len(batch)} vectors>",
+                input_tokens=total_input_tokens,
+            )
 
         vectors = list(response.embeddings)
 

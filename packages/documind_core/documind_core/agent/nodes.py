@@ -43,7 +43,9 @@ from documind_core.retrieval.hybrid import RetrievedChunk
 from documind_core.retrieval.rerank import retrieve_and_rerank
 
 logger = logging.getLogger(__name__)
-
+from documind_core.observability.langfuse_client import (  # noqa: E402
+    observe_node, observe_llm_call, update_span, update_generation, estimate_tokens,
+)
 
 # ─── LLM factory ──────────────────────────────────────────────────────────────
 
@@ -117,9 +119,14 @@ def plan_node(state: AgentState) -> dict:
     logger.info("[plan] Decomposing query: %r", state["query"])
 
     prompt = PLAN_PROMPT.format(query=state["query"])
-    response = _llm().invoke([HumanMessage(content=prompt)])
-    raw = response.content if hasattr(response, "content") else str(response)
-
+    s = get_settings()
+    with observe_node("plan", input={"query": state["query"]}):
+        with observe_llm_call("llm:plan", model=s.ollama_llm_model, prompt=prompt):
+            response = _llm().invoke([HumanMessage(content=prompt)])
+            raw = response.content if hasattr(response, "content") else str(response)
+            update_generation(output=raw,
+                              input_tokens=estimate_tokens(prompt),
+                              output_tokens=estimate_tokens(raw))
     try:
         parsed = _parse_json_from_llm(raw)
         plan = parsed.get("plan", "Direct retrieval")
