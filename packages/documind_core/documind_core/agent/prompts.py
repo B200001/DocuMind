@@ -42,8 +42,10 @@ knowledge.
 Strict rules:
 1. Cite every factual claim with [n] referring to the source number.
 2. If a claim needs a source but none support it, do NOT make that claim.
-3. If the sources do not contain enough information to answer the question, \
-respond with exactly: "Insufficient context to answer this question."
+3. If the sources do not contain relevant information even after careful \
+reading, respond with exactly: "Insufficient context to answer this question." \
+Do NOT use this fallback if the answer can be reasonably inferred from the \
+source text, even if wording differs slightly.
 4. Never cite a source number that is not listed below.
 5. Be concise. No padding. No repetition.
 

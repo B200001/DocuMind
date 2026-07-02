@@ -1,4 +1,4 @@
-.PHONY: up down logs dev seed eval
+.PHONY: up down logs install dev seed eval
 
 # ─── Docker Compose ───────────────────────────────────────
 
@@ -15,6 +15,11 @@ logs:
 	docker compose logs -f
 
 # ─── Local Dev ────────────────────────────────────────────
+
+## Install shared Python package (editable, Python 3.13-safe)
+install:
+	.venv/bin/python -m pip install -e packages/documind_core \
+		--config-settings editable_mode=compat
 
 ## Start backend (FastAPI) + frontend (Next.js) in parallel
 dev:

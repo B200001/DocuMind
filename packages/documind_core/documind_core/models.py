@@ -6,7 +6,7 @@ from typing import List, Optional
 from sqlmodel import Field, Relationship, Session, SQLModel, create_engine
 
 from documind_core.config import get_settings
-from documind_core.paths import ensure_dirs
+from documind_core.paths import DATA_DIR, ensure_dirs
 
 
 class DocumentStatus(str, Enum):
@@ -96,9 +96,9 @@ class Message(SQLModel, table=True):
 
 def _make_engine():
     ensure_dirs()
-    settings = get_settings()
+    db_url = f"sqlite:///{DATA_DIR / 'documind.db'}"
     connect_args = {"check_same_thread": False}
-    return create_engine(settings.sqlite_url, echo=False, connect_args=connect_args)
+    return create_engine(db_url, echo=False, connect_args=connect_args)
 
 
 engine = _make_engine()
