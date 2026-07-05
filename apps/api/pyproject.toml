@@ -1,7 +1,7 @@
 # Declares the tools needed to build this package and how to invoke them.
 [build-system]
 requires = ["setuptools>=72", "wheel"]  # setuptools does the packaging, wheel produces the binary distribution format
-build-backend = "setuptools.backends.legacy:build"  # tells pip/build which backend entry point builds this package
+build-backend = "setuptools.build_meta"  # tells pip/build which backend entry point builds this package
 
 # Metadata and dependencies for the installable "documind-api" package itself.
 [project]

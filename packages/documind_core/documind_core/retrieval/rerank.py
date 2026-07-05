@@ -27,13 +27,14 @@ first call to rerank() loads the model and all subsequent calls reuse it
 instantly. The load itself is deferred to first use (lazy) so importing
 this module at startup doesn't block until the model is actually needed.
 
-FlagEmbedding vs sentence-transformers
+sentence-transformers vs FlagEmbedding
 ---------------------------------------
-Both can load BAAI/bge-reranker-base. FlagEmbedding's FlagReranker is
-tried first (it has BGE-specific optimisations); if unavailable we fall
-back to sentence_transformers.CrossEncoder (same model, same scores, just
-a different Python wrapper). This makes the module resilient to either
-package being missing or broken in a given environment.
+Both can load BAAI/bge-reranker-base and produce identical scores.
+sentence_transformers.CrossEncoder is tried first — FlagEmbedding's
+FlagReranker breaks under transformers >= 5 (XLMRobertaTokenizer lost
+prepare_for_model), so it is kept only as a fallback. This makes the
+module resilient to either package being missing or broken in a given
+environment.
 
 Usage
 -----
@@ -71,14 +72,15 @@ def _get_reranker():
     """
     Return the process-wide cross-encoder singleton, loading it on first call.
 
-    We try FlagEmbedding first (BGE-optimised), then fall back to
-    sentence-transformers CrossEncoder. Both produce identical scores for
-    BAAI/bge-reranker-base — the wrapper differences are internal only.
+    We try sentence-transformers CrossEncoder first (works with current
+    transformers releases), then fall back to FlagEmbedding's FlagReranker.
+    Both produce identical scores for BAAI/bge-reranker-base — the wrapper
+    differences are internal only.
 
     Raises
     ------
     ImportError
-        If neither FlagEmbedding nor sentence-transformers is installed.
+        If neither sentence-transformers nor FlagEmbedding is installed.
     """
     global _reranker_instance
 
@@ -88,33 +90,37 @@ def _get_reranker():
     model_name = get_settings().reranker_model  # default: BAAI/bge-reranker-base
     logger.info("Loading reranker model '%s' (first call — this may take a moment)...", model_name)
 
-    # Attempt 1: FlagEmbedding (preferred for BGE models)
-    try:
-        from FlagEmbedding import FlagReranker
-        _reranker_instance = FlagReranker(model_name, use_fp16=True)
-        # Smoke-test: XLMRobertaTokenizer dropped prepare_for_model in newer
-        # transformers; catch it here so we fall back instead of dying at query time.
-        _reranker_instance.compute_score([["test", "test"]], normalize=True)
-        logger.info("Reranker loaded via FlagEmbedding.")
-        return _reranker_instance
-    except ImportError:
-        logger.debug("FlagEmbedding not available, trying sentence-transformers.")
-    except Exception as exc:
-        logger.warning("FlagEmbedding failed to load reranker: %s. Trying sentence-transformers.", exc)
-        _reranker_instance = None
-    # Attempt 2: sentence-transformers CrossEncoder (universal fallback)
+    # Attempt 1: sentence-transformers CrossEncoder
     try:
         from sentence_transformers import CrossEncoder
         _reranker_instance = CrossEncoder(model_name)
         logger.info("Reranker loaded via sentence-transformers CrossEncoder.")
         return _reranker_instance
+    except ImportError:
+        logger.debug("sentence-transformers not available, trying FlagEmbedding.")
+    except Exception as exc:
+        logger.warning("sentence-transformers failed to load reranker: %s. Trying FlagEmbedding.", exc)
+        _reranker_instance = None
+
+    # Attempt 2: FlagEmbedding FlagReranker (broken under transformers >= 5)
+    try:
+        from FlagEmbedding import FlagReranker
+        _reranker_instance = FlagReranker(model_name, use_fp16=True)
+        # Smoke-test: XLMRobertaTokenizer dropped prepare_for_model in newer
+        # transformers; fail here rather than at query time.
+        _reranker_instance.compute_score([["test", "test"]], normalize=True)
+        logger.info("Reranker loaded via FlagEmbedding.")
+        return _reranker_instance
     except ImportError as exc:
         raise ImportError(
-            "Neither FlagEmbedding nor sentence-transformers is installed. "
+            "Neither sentence-transformers nor FlagEmbedding is installed. "
             "Install at least one:\n"
-            "  pip install FlagEmbedding\n"
-            "  pip install sentence-transformers"
+            "  pip install sentence-transformers\n"
+            "  pip install FlagEmbedding"
         ) from exc
+    except Exception:
+        _reranker_instance = None
+        raise
 
 
 def _compute_scores(reranker, query: str, texts: list[str]) -> list[float]:
@@ -246,6 +252,3 @@ def retrieve_and_rerank(query: str, top_n: Optional[int] = None, filter=None,
             "top_score": round(results[0].rrf_score, 4) if results else None,
         })
     return results
-
-    # Step 2: precise reranking — narrows to rerank_top_n (default 8)
-    return rerank(query=query, chunks=candidates, top_n=top_n)

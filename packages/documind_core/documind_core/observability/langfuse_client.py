@@ -59,10 +59,12 @@ def _build_client():
             return None
 
         from langfuse import Langfuse
+        # base_url (not the deprecated host=) so the configured URL always
+        # wins over a stray LANGFUSE_BASE_URL exported in the environment.
         client = Langfuse(
             public_key=s.langfuse_public_key,
             secret_key=s.langfuse_secret_key,
-            host=s.langfuse_host,
+            base_url=s.langfuse_host,
         )
         logger.info("Langfuse client initialised (host=%s).", s.langfuse_host)
         return client

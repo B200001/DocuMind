@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocuMind — How a Question Flows</title>
+<style>
+  :root {
+    --bg: #16181f;
+    --card: #1f222c;
+    --card-2: #262a36;
+    --border: rgba(255,255,255,0.09);
+    --text: #e9e9e4;
+    --muted: #9aa0ae;
+    --amber: #e8a33d;
+    --amber-dim: rgba(232,163,61,0.14);
+    --teal: #5aa7b4;
+    --teal-dim: rgba(90,167,180,0.14);
+    --green: #58b47c;
+    --green-dim: rgba(88,180,124,0.14);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; justify-content: center;
+    padding: 48px 24px 64px;
+  }
+  .page { width: 100%; max-width: 1060px; }
+
+  header { text-align: center; margin-bottom: 40px; }
+  .wordmark {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 28px; letter-spacing: -0.02em; margin-bottom: 10px;
+  }
+  .wordmark .dot { color: var(--amber); }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  header p { color: var(--muted); font-size: 14px; }
+
+  .layer {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    display: flex; align-items: center; gap: 20px;
+  }
+  .layer-info { flex: 1; min-width: 0; }
+  .chip {
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.09em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 99px; margin-bottom: 7px;
+  }
+  .chip.amber { background: var(--amber-dim); color: var(--amber); }
+  .chip.teal  { background: var(--teal-dim);  color: var(--teal); }
+  .chip.green { background: var(--green-dim); color: var(--green); }
+  .layer h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .layer .desc { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+  .tech {
+    flex-shrink: 0; text-align: right;
+    font-size: 12px; color: var(--muted);
+  }
+  .tech b {
+    display: block; color: var(--text); font-size: 13px;
+    font-weight: 600; margin-bottom: 2px;
+  }
+
+  .arrow {
+    display: flex; flex-direction: column; align-items: center;
+    height: 34px; justify-content: center; position: relative;
+  }
+  .arrow::before {
+    content: ""; width: 2px; height: 100%;
+    background: linear-gradient(var(--border), rgba(232,163,61,0.5));
+  }
+  .arrow::after {
+    content: ""; position: absolute; bottom: 0;
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 7px solid rgba(232,163,61,0.7);
+  }
+
+  /* Agent pipeline row */
+  .pipeline { display: flex; align-items: stretch; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .node {
+    flex: 1; min-width: 118px;
+    background: var(--card-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; position: relative;
+  }
+  .node .n { font-size: 10px; font-weight: 700; color: var(--amber); margin-bottom: 3px; }
+  .node .t { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
+  .node .d { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+  .node.loop { border-color: rgba(232,163,61,0.35); }
+  .loopnote {
+    margin-top: 10px; font-size: 11.5px; color: var(--amber);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .loopnote svg { flex-shrink: 0; }
+
+  /* Retrieval inner chain */
+  .chain { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .step {
+    background: var(--card-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; flex: 1; min-width: 200px;
+  }
+  .step .t { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .step .t small { color: var(--teal); font-weight: 600; }
+  .step .d { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+  .chain .sep { color: var(--teal); font-size: 16px; flex-shrink: 0; }
+
+  /* Answer layer */
+  .answer-demo {
+    margin-top: 12px; background: var(--card-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; font-size: 13px; line-height: 1.6;
+    color: var(--text);
+  }
+  .cite {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--amber-dim); color: var(--amber);
+    font-size: 10.5px; font-weight: 700; border-radius: 5px;
+    padding: 1px 6px; margin: 0 2px; vertical-align: 1px;
+  }
+
+  footer {
+    margin-top: 44px; border-top: 1px solid var(--border); padding-top: 22px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .stack { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11.5px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 99px; padding: 4px 11px;
+  }
+  .free {
+    font-size: 13px; font-weight: 600; color: var(--green);
+    background: var(--green-dim); border-radius: 99px; padding: 6px 14px;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="wordmark">documind<span class="dot">.</span></div>
+    <h1>How a question travels through the system</h1>
+    <p>Every step runs on my laptop — no cloud, no API keys, $0.</p>
+  </header>
+
+  <!-- 1. Browser -->
+  <div class="layer">
+    <div class="layer-info">
+      <span class="chip amber">Layer 1 · You</span>
+      <h2>You ask a question in the browser</h2>
+      <div class="desc">"What is the refund policy?" — the chat page shows the agent's progress live, step by step, as it works.</div>
+    </div>
+    <div class="tech"><b>Next.js + React</b>the website</div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- 2. API -->
+  <div class="layer">
+    <div class="layer-info">
+      <span class="chip amber">Layer 2 · Server</span>
+      <h2>The API server picks it up</h2>
+      <div class="desc">It opens a live stream back to the browser, so you watch the answer appear word by word instead of staring at a spinner.</div>
+    </div>
+    <div class="tech"><b>FastAPI (Python)</b>server-sent events</div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- 3. Agent -->
+  <div class="layer" style="flex-direction: column; align-items: stretch;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div class="layer-info">
+        <span class="chip amber">Layer 3 · The Agent</span>
+        <h2>An agent thinks in five steps</h2>
+        <div class="desc">Not one giant AI call — a small pipeline where each step has one job, and the agent checks its own work before answering.</div>
+      </div>
+      <div class="tech"><b>LangGraph</b>agent workflow</div>
+    </div>
+    <div class="pipeline">
+      <div class="node"><div class="n">1</div><div class="t">Plan</div><div class="d">Breaks the question into smaller sub-questions</div></div>
+      <div class="node"><div class="n">2</div><div class="t">Retrieve</div><div class="d">Finds the most relevant passages (see below)</div></div>
+      <div class="node"><div class="n">3</div><div class="t">Generate</div><div class="d">Writes a draft answer, citing its sources</div></div>
+      <div class="node loop"><div class="n">4</div><div class="t">Critic</div><div class="d">Checks: is every claim backed by a source?</div></div>
+      <div class="node"><div class="n">5</div><div class="t">Finalize</div><div class="d">Sends the approved answer to you</div></div>
+    </div>
+    <div class="loopnote">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      If the Critic finds a gap, it loops back and retrieves again — up to 2 extra rounds.
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- 4. Retrieval -->
+  <div class="layer" style="flex-direction: column; align-items: stretch;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div class="layer-info">
+        <span class="chip teal">Layer 4 · Search</span>
+        <h2>Inside "Retrieve": three-stage search</h2>
+        <div class="desc">This is where the right passages get found in your uploaded documents.</div>
+      </div>
+      <div class="tech"><b>Ollama + Qdrant</b>local AI &amp; vector DB</div>
+    </div>
+    <div class="chain">
+      <div class="step"><div class="t">Embed <small>· Ollama</small></div><div class="d">Turns the question into numbers that capture its meaning (nomic-embed-text)</div></div>
+      <div class="sep">→</div>
+      <div class="step"><div class="t">Hybrid search <small>· Qdrant</small></div><div class="d">Matches by meaning AND exact keywords, grabs the top 40 candidates</div></div>
+      <div class="sep">→</div>
+      <div class="step"><div class="t">Rerank <small>· BGE model</small></div><div class="d">Reads each candidate closely and keeps only the best 8</div></div>
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- 5. Answer -->
+  <div class="layer" style="flex-direction: column; align-items: stretch;">
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div class="layer-info">
+        <span class="chip green">Layer 5 · Answer</span>
+        <h2>A grounded answer, with receipts</h2>
+        <div class="desc">Every claim carries a clickable citation — click it and see the exact passage it came from. No made-up sources.</div>
+      </div>
+      <div class="tech"><b>Llama 3.1 8B</b>runs via Ollama</div>
+    </div>
+    <div class="answer-demo">
+      Customers can request a full refund within 30 days of purchase<span class="cite">1</span>, as long as the item is unused and in its original packaging<span class="cite">1</span>. Approved refunds are issued within 5–7 business days<span class="cite">2</span>.
+    </div>
+  </div>
+
+  <footer>
+    <div class="stack">
+      <span class="badge">Next.js</span>
+      <span class="badge">FastAPI</span>
+      <span class="badge">LangGraph</span>
+      <span class="badge">Ollama · Llama 3.1</span>
+      <span class="badge">Qdrant</span>
+      <span class="badge">SQLite</span>
+      <span class="badge">BGE Reranker</span>
+      <span class="badge">Langfuse</span>
+      <span class="badge">Docker</span>
+    </div>
+    <div class="free">100% local · 100% free · your data never leaves your machine</div>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -16,25 +16,25 @@ logs:
 
 # ─── Local Dev ────────────────────────────────────────────
 
-## Install shared Python package (editable, Python 3.13-safe)
+## Install shared Python packages (editable, Python 3.13-safe)
 install:
-	.venv/bin/python -m pip install -e packages/documind_core \
+	.venv/bin/python -m pip install -e packages/documind_core -e apps/api \
 		--config-settings editable_mode=compat
 
 ## Start backend (FastAPI) + frontend (Next.js) in parallel
 dev:
 	@echo "Starting backend and frontend..."
 	@trap 'kill 0' SIGINT; \
-	(cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000) & \
-	(cd frontend && npm run dev) & \
+	(cd apps/api && ../../.venv/bin/uvicorn app.main:app --reload --port 8000) & \
+	(cd apps/web && npm run dev) & \
 	wait
 
 # ─── Data / Evals ─────────────────────────────────────────
 
 ## Seed the vector store with sample documents
 seed:
-	cd backend && .venv/bin/python scripts/seed.py
+	.venv/bin/python scripts/seed_docs.py
 
 ## Run evaluation suite
 eval:
-	cd backend && .venv/bin/python scripts/eval.py
+	.venv/bin/python -m evaluation.retrieval_eval && .venv/bin/python -m evaluation.run_eval

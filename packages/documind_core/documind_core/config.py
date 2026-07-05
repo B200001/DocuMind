@@ -9,7 +9,7 @@ Usage:
 """
 
 from functools import lru_cache
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from documind_core.paths import REPO_ROOT
@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     # ─── Langfuse ─────────────────────────────────────────
     langfuse_host: str = Field(
         default="http://localhost:3000",
+        validation_alias=AliasChoices("LANGFUSE_BASE_URL", "LANGFUSE_HOST"),
         description="URL of the Langfuse observability server.",
     )
     langfuse_public_key: str = Field(
